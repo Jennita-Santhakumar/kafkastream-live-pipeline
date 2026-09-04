@@ -5,15 +5,13 @@ Slower than the unit tests (spins a container, runs the job for a bounded
 window) so it's kept in its own module and separately markable in CI.
 """
 import json
-import shutil
 import sys
-import tempfile
 import time
 from pathlib import Path
 
 import pytest
 from confluent_kafka import Producer
-from delta import DeltaTable
+from confluent_kafka.admin import AdminClient, NewTopic
 from testcontainers.kafka import KafkaContainer
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
@@ -68,14 +66,29 @@ def test_streaming_job_writes_events_and_stats_to_delta(kafka_container, tmp_pat
     lookup_df.write.format("delta").mode("overwrite").save(lookup_path)
     lookup_df = spark.read.format("delta").load(lookup_path)
 
-    _produce_events(bootstrap_servers, topic, n=50)
+    # Spark's Kafka source fails outright (UnknownTopicOrPartitionException)
+    # if the topic doesn't exist yet when the query starts, so create it
+    # explicitly rather than relying on auto-create-on-first-produce timing.
+    admin = AdminClient({"bootstrap.servers": bootstrap_servers})
+    admin.create_topics([NewTopic(topic, num_partitions=1, replication_factor=1)])
+    time.sleep(2)
 
+    # The job's Kafka source uses startingOffsets="latest" (correct for a live
+    # job: don't replay history on restart), so the queries must be started -
+    # and given a moment to establish that starting offset on their first
+    # (empty) micro-batch - *before* any events are produced, or those events
+    # land before the offset the query considers "latest" and are silently
+    # never seen.
     events_query = streaming_main.start_events_query(
         spark, lookup_df, bootstrap_servers, topic, "10000", "2 seconds"
     )
     stats_query = streaming_main.start_windowed_stats_query(
         spark, bootstrap_servers, topic, "10000", "2 seconds"
     )
+    events_query.processAllAvailable()
+    stats_query.processAllAvailable()
+
+    _produce_events(bootstrap_servers, topic, n=50)
 
     try:
         events_query.processAllAvailable()
