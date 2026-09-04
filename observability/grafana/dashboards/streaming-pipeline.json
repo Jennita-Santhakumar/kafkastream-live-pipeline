@@ -1,0 +1,35 @@
+{
+  "title": "Realtime Event Streaming Pipeline",
+  "uid": "streaming-pipeline",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "5s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Events / sec",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "pipeline_events_per_sec", "refId": "A" }]
+    },
+    {
+      "type": "timeseries",
+      "title": "p95 Processing Lag (ms)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [{ "expr": "pipeline_p95_lag_ms", "refId": "A" }]
+    },
+    {
+      "type": "stat",
+      "title": "Total Events Processed",
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 8 },
+      "targets": [{ "expr": "pipeline_total_events", "refId": "A" }]
+    },
+    {
+      "type": "stat",
+      "title": "Alerts (last hour)",
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 8 },
+      "targets": [{ "expr": "pipeline_alerts_last_hour", "refId": "A" }]
+    }
+  ]
+}

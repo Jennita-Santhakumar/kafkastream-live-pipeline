@@ -1,0 +1,6 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+pydantic-settings==2.5.2
+pandas==2.2.3
+deltalake==0.20.1
+prometheus-client==0.21.0

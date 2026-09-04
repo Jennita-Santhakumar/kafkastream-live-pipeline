@@ -1,0 +1,114 @@
+services:
+  kafka:
+    image: apache/kafka:3.7.1
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29099
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29099
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    ports:
+      - "29099:29099"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 15
+
+  seed-lookup:
+    build:
+      context: .
+      dockerfile: streaming/Dockerfile
+    command: ["python", "scripts/seed_lookup.py"]
+    environment:
+      DELTA_DATA_ROOT: /data
+    volumes:
+      - ./data:/data
+
+  streaming:
+    build:
+      context: .
+      dockerfile: streaming/Dockerfile
+    depends_on:
+      kafka:
+        condition: service_healthy
+      seed-lookup:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: events
+      DELTA_DATA_ROOT: /data
+      SPARK_CHECKPOINT_ROOT: /checkpoints
+      TRIGGER_INTERVAL: 5 seconds
+      MAX_OFFSETS_PER_TRIGGER: "20000"
+    volumes:
+      - ./data:/data
+      - checkpoints:/checkpoints
+    ports:
+      - "4045:4040" # Spark UI, for watching the running streaming job
+
+  producer:
+    build: ./producer
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_TOPIC: events
+      EVENTS_PER_SEC: "50"
+
+  api:
+    build: ./backend
+    depends_on:
+      seed-lookup:
+        condition: service_completed_successfully
+    environment:
+      DELTA_DATA_ROOT: /data
+      CORS_ORIGINS: http://localhost:5210
+    volumes:
+      - ./data:/data:ro
+    ports:
+      - "8035:8000"
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8035
+    depends_on:
+      - api
+    ports:
+      - "5210:5173"
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9096:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.2.2
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "3035:3000"
+    depends_on:
+      - prometheus
+
+volumes:
+  checkpoints:
