@@ -1,5 +1,7 @@
 # Realtime Event Streaming Pipeline
 
+> **Maintained by [Jennita S](https://github.com/Jennita-Santhakumar)** · [LinkedIn](https://linkedin.com/in/jennitas) · jennitasanthakumar0@gmail.com
+
 A production-shaped real-time data platform: a synthetic e-commerce event producer feeds Kafka,
 a PySpark Structured Streaming job validates/deduplicates/enriches events and computes windowed
 aggregations, throughput/lag metrics, and rule-based anomaly alerts, all persisted to Delta Lake
@@ -199,3 +201,7 @@ Takeaways, stated honestly:
 
 Kafka (KRaft mode) · PySpark Structured Streaming · Delta Lake · FastAPI · `deltalake` (delta-rs)
 · React + Vite + TypeScript + Recharts · Prometheus · Grafana · Docker Compose
+
+## Credits
+
+Developed by Kabilesh Rajaselvan with contributions from Jennita S.
